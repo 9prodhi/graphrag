@@ -14,7 +14,8 @@ from graphrag.index.config.storage import (
     PipelineStorageConfig,
 )
 
-from .blob_pipeline_storage import create_blob_storage
+#from .blob_pipeline_storage import create_blob_storage
+from .supabase_blob_pipeline import create_blob_storage
 from .file_pipeline_storage import create_file_storage
 from .memory_pipeline_storage import create_memory_storage
 
@@ -26,9 +27,10 @@ def load_storage(config: PipelineStorageConfig):
             return create_memory_storage()
         case StorageType.blob:
             config = cast(PipelineBlobStorageConfig, config)
+            api_key = config.storage_account_blob_url if config.storage_account_blob_url else config.api_key
             return create_blob_storage(
                 config.connection_string,
-                config.storage_account_blob_url,
+                api_key ,
                 config.container_name,
                 config.base_dir,
             )

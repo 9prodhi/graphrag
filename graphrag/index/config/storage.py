@@ -66,6 +66,11 @@ class PipelineBlobStorageConfig(PipelineStorageConfig[Literal[StorageType.blob]]
     )
     """The storage account blob url."""
 
+    api_key: str | None = pydantic_Field(
+        description="The storage account secret key.", default=None
+    )
+    """The storage account secret key."""
+
 
 PipelineStorageConfigTypes = (
     PipelineFileStorageConfig | PipelineMemoryStorageConfig | PipelineBlobStorageConfig

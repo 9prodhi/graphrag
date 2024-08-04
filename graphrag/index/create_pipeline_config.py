@@ -535,6 +535,7 @@ def _get_storage_config(
             connection_string = settings.storage.connection_string
             storage_account_blob_url = settings.storage.storage_account_blob_url
             container_name = settings.storage.container_name
+            api_key = settings.storage.api_key
             if container_name is None:
                 msg = "Container name must be provided for blob storage."
                 raise ValueError(msg)
@@ -546,6 +547,7 @@ def _get_storage_config(
                 container_name=container_name,
                 base_dir=settings.storage.base_dir,
                 storage_account_blob_url=storage_account_blob_url,
+                api_key=api_key
             )
         case _:
             # relative to the root_dir

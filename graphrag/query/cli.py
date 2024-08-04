@@ -6,6 +6,7 @@
 import os
 from pathlib import Path
 from typing import cast
+import re
 
 import pandas as pd
 
@@ -29,6 +30,8 @@ from .indexer_adapters import (
     read_indexer_reports,
     read_indexer_text_units,
 )
+
+from graphrag.index.storage import DataPath
 
 reporter = PrintProgressReporter("")
 
@@ -89,20 +92,24 @@ def run_global_search(
     query: str,
 ):
     """Run a global search with the given query."""
-    data_dir, root_dir, config = _configure_paths_and_settings(
+    data_path, root_dir, config = _configure_paths_and_settings(
         data_dir, root_dir, config_dir
     )
-    data_path = Path(data_dir)
+    # data_path = DataPath(data_dir)
 
-    final_nodes: pd.DataFrame = pd.read_parquet(
-        data_path / "create_final_nodes.parquet"
-    )
-    final_entities: pd.DataFrame = pd.read_parquet(
-        data_path / "create_final_entities.parquet"
-    )
-    final_community_reports: pd.DataFrame = pd.read_parquet(
-        data_path / "create_final_community_reports.parquet"
-    )
+    # final_nodes: pd.DataFrame = pd.read_parquet(
+    #     data_path / "create_final_nodes.parquet"
+    # )
+    # final_entities: pd.DataFrame = pd.read_parquet(
+    #     data_path / "create_final_entities.parquet"
+    # )
+    # final_community_reports: pd.DataFrame = pd.read_parquet(
+    #     data_path / "create_final_community_reports.parquet"
+    # )
+    final_nodes: pd.DataFrame = data_path.join("create_final_nodes.parquet").read_parquet()
+    final_entities: pd.DataFrame = data_path.join("create_final_entities.parquet").read_parquet()
+    final_community_reports: pd.DataFrame = data_path.join("create_final_community_reports.parquet").read_parquet()
+
 
     reports = read_indexer_reports(
         final_community_reports, final_nodes, community_level
@@ -130,10 +137,11 @@ def run_local_search(
     query: str,
 ):
     """Run a local search with the given query."""
-    data_dir, root_dir, config = _configure_paths_and_settings(
+    data_path, root_dir, config = _configure_paths_and_settings(
         data_dir, root_dir, config_dir
     )
-    data_path = Path(data_dir)
+    # Just to fix the errors, need code changes for the local search as well
+    data_path = Path("")
 
     final_nodes = pd.read_parquet(data_path / "create_final_nodes.parquet")
     final_community_reports = pd.read_parquet(
@@ -188,30 +196,98 @@ def run_local_search(
     return result.response
 
 
+
 def _configure_paths_and_settings(
     data_dir: str | None,
     root_dir: str | None,
     config_dir: str | None,
-) -> tuple[str, str | None, GraphRagConfig]:
+) -> tuple[DataPath, str | None, GraphRagConfig]:
     if data_dir is None and root_dir is None:
         msg = "Either data_dir or root_dir must be provided."
         raise ValueError(msg)
-    if data_dir is None:
-        data_dir = _infer_data_dir(cast(str, root_dir))
+
     config = _create_graphrag_config(root_dir, config_dir)
-    return data_dir, root_dir, config
+    if data_dir is None:
+        data_path =  _infer_data_dir(cast(str, root_dir), config)
+    else:
+        data_path = DataPath(data_dir)
+    
+    return data_path, root_dir, config
 
 
-def _infer_data_dir(root: str) -> str:
-    output = Path(root) / "output"
-    # use the latest data-run folder
-    if output.exists():
-        folders = sorted(output.iterdir(), key=os.path.getmtime, reverse=True)
-        if len(folders) > 0:
-            folder = folders[0]
-            return str((folder / "artifacts").absolute())
-    msg = f"Could not infer data directory from root={root}"
-    raise ValueError(msg)
+# def _infer_data_dir(root: str) -> str:
+#     output = Path(root) / "output"
+#     # use the latest data-run folder
+#     if output.exists():
+#         folders = sorted(output.iterdir(), key=os.path.getmtime, reverse=True)
+#         if len(folders) > 0:
+#             folder = folders[0]
+#             return str((folder / "artifacts").absolute())
+#     msg = f"Could not infer data directory from root={root}"
+#     raise ValueError(msg)
+from graphrag.index.config.storage import PipelineStorageConfigTypes, PipelineStorageConfig
+from graphrag.index.storage import PipelineStorage, load_storage
+from graphrag.config.enums import (
+    CacheType,
+    InputFileType,
+    ReportingType,
+    StorageType,
+    TextEmbeddingTarget,
+)
+
+from graphrag.index.config.storage import (
+    PipelineStorageConfigTypes,
+    PipelineFileStorageConfig,
+    PipelineMemoryStorageConfig,
+    PipelineBlobStorageConfig
+)
+from collections import defaultdict
+
+def _infer_data_dir(root: str, config: GraphRagConfig) -> DataPath:
+    storage_config = config.storage
+    if not isinstance(storage_config, PipelineStorageConfigTypes):
+        # Convert StorageConfig to appropriate PipelineStorageConfig subclass
+        if storage_config.type == StorageType.file:
+            storage_config = PipelineFileStorageConfig(**storage_config.model_dump())
+        elif storage_config.type == StorageType.memory:
+            storage_config = PipelineMemoryStorageConfig(**storage_config.model_dump())
+        elif storage_config.type == StorageType.blob:
+            storage_config = PipelineBlobStorageConfig(**storage_config.model_dump())
+        else:
+            raise ValueError(f"Unsupported storage type: {storage_config.type}")
+    if config.storage.type == StorageType.blob:
+        # For blob storage (including Supabase)
+        storage = load_storage(storage_config)
+        
+        # List all items in the storage
+        all_items = storage.find(re.compile(r".*"), "output")
+        
+        directories = set(item[0] for item in all_items)
+        sorted_dirs = sorted(directories, reverse=True)
+        
+        for directory in sorted_dirs:
+            # Check if the directory contains .parquet files
+            # parquet_files = list(storage.find(re.compile(rf"{re.escape(directory)}.*\.parquet"))) # re.compile(rf"{re.escape(directory)}.*\.parquet")
+            parquet_pattern = rf"{directory}.*\.parquet"
+            print(f"Searching with pattern: {parquet_pattern}")
+            parquet_files = list(storage.find(re.compile(parquet_pattern)))
+            print(f"Found files: {parquet_files}")
+            if parquet_files:
+                # Found a directory with .parquet files
+                return DataPath(storage, is_supabase=True)
+        
+        msg = f"Could not find any directories with .parquet files in the blob storage"
+        raise ValueError(msg)
+    else:
+        # For local file system
+        output = Path(root) / "output"
+        if output.exists():
+            folders = sorted(output.iterdir(), key=os.path.getmtime, reverse=True)
+            if len(folders) > 0:
+                folder = folders[0]
+                return DataPath(str((folder / "artifacts").absolute()), is_supabase=False)
+        msg = f"Could not infer data directory from root={root}"
+        raise ValueError(msg)
 
 
 def _create_graphrag_config(

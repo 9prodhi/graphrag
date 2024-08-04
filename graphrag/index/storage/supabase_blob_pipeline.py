@@ -1,5 +1,6 @@
 import logging
 import re
+import os
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -64,6 +65,7 @@ class SupabasePipelineStorage(PipelineStorage):
         buckets = self._client.storage.list_buckets()
         return any(bucket.name == self._bucket_name for bucket in buckets)
 
+
     def find(
         self,
         file_pattern: re.Pattern[str],
@@ -82,11 +84,12 @@ class SupabasePipelineStorage(PipelineStorage):
         )
 
         def filename(file_path: str) -> str:
-            if file_path.startswith(self._path_prefix):
-                file_path = file_path.replace(self._path_prefix, "", 1)
-            if file_path.startswith("/"):
-                file_path = file_path[1:]
-            return file_path
+            full_path = os.path.join(base_dir, file_path)
+            if full_path.startswith(self._path_prefix):
+                full_path = full_path.replace(self._path_prefix, "", 1)
+            if full_path.startswith("/"):
+                full_path = full_path[1:]
+            return full_path
 
         def item_filter(item: dict[str, Any]) -> bool:
             if file_filter is None:
@@ -100,11 +103,12 @@ class SupabasePipelineStorage(PipelineStorage):
             num_total = len(all_files)
             num_filtered = 0
             for file in all_files:
-                match = file_pattern.match(file["name"])
-                if match and file["name"].startswith(base_dir):
+                full_name = filename(file["name"])
+                match = file_pattern.match(full_name)
+                if match:
                     group = match.groupdict()
                     if item_filter(group):
-                        yield (filename(file["name"]), group)
+                        yield (full_name, group)
                         num_loaded += 1
                         if max_count > 0 and num_loaded >= max_count:
                             break

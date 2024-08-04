@@ -380,6 +380,7 @@ def create_graphrag_config(
                 storage_account_blob_url=reader.str(Fragment.storage_account_blob_url),
                 container_name=reader.str(Fragment.container_name),
                 base_dir=reader.str(Fragment.base_dir) or defs.STORAGE_BASE_DIR,
+                api_key= reader.str(Fragment.api_key),
             )
         with reader.envvar_prefix(Section.chunk), reader.use(values.get("chunks")):
             group_by_columns = reader.list("group_by_columns", "BY_COLUMNS")

@@ -3,25 +3,84 @@
 
 """Command line interface for the query module."""
 
+# import os
+# from pathlib import Path
+# from typing import cast, Union
+# import re
+
+# import pandas as pd
+
+# from graphrag.config import (
+#     GraphRagConfig,
+#     create_graphrag_config,
+# )
+# from graphrag.index.progress import PrintProgressReporter
+# from graphrag.model.entity import Entity
+# from graphrag.query.input.loaders.dfs import (
+#     store_entity_semantic_embeddings,
+# )
+# from graphrag.vector_stores import VectorStoreFactory, VectorStoreType
+# from graphrag.vector_stores.lancedb import LanceDBVectorStore
+
+# from .factories import get_global_search_engine, get_local_search_engine
+# from .indexer_adapters import (
+#     read_indexer_covariates,
+#     read_indexer_entities,
+#     read_indexer_relationships,
+#     read_indexer_reports,
+#     read_indexer_text_units,
+# )
+
+# from graphrag.index.storage import DataPath
+
+# reporter = PrintProgressReporter("")
+# Copyright (c) 2024 Microsoft Corporation.
+# Licensed under the MIT License
+
+"""Command line interface for the query module."""
+
+# Standard library imports
 import os
-from pathlib import Path
-from typing import cast
 import re
+import asyncio
+from pathlib import Path
+from typing import cast, Union, List, Tuple, Dict, Any
+from collections import defaultdict
+from datetime import datetime
+from io import BytesIO
 
+# Third-party imports
 import pandas as pd
+import yaml
+import json
 
+# GraphRag imports
 from graphrag.config import (
     GraphRagConfig,
     create_graphrag_config,
 )
-from graphrag.index.progress import PrintProgressReporter
-from graphrag.model.entity import Entity
-from graphrag.query.input.loaders.dfs import (
-    store_entity_semantic_embeddings,
+from graphrag.config.enums import (
+    CacheType,
+    InputFileType,
+    ReportingType,
+    StorageType,
+    TextEmbeddingTarget,
 )
+from graphrag.index.progress import PrintProgressReporter
+from graphrag.index.storage import DataPath, PipelineStorage, load_storage
+from graphrag.index.config.storage import (
+    PipelineStorageConfigTypes,
+    PipelineStorageConfig,
+    PipelineFileStorageConfig,
+    PipelineMemoryStorageConfig,
+    PipelineBlobStorageConfig,
+)
+from graphrag.model.entity import Entity
+from graphrag.query.input.loaders.dfs import store_entity_semantic_embeddings
 from graphrag.vector_stores import VectorStoreFactory, VectorStoreType
 from graphrag.vector_stores.lancedb import LanceDBVectorStore
 
+# Local imports
 from .factories import get_global_search_engine, get_local_search_engine
 from .indexer_adapters import (
     read_indexer_covariates,
@@ -31,10 +90,10 @@ from .indexer_adapters import (
     read_indexer_text_units,
 )
 
-from graphrag.index.storage import DataPath
-
+# Initialize reporter
 reporter = PrintProgressReporter("")
 
+# Rest of the code remains the same...
 
 def __get_embedding_description_store(
     entities: list[Entity],
@@ -83,6 +142,8 @@ def __get_embedding_description_store(
     return description_embedding_store
 
 
+
+
 def run_global_search(
     config_dir: str | None,
     data_dir: str | None,
@@ -95,20 +156,17 @@ def run_global_search(
     data_path, root_dir, config = _configure_paths_and_settings(
         data_dir, root_dir, config_dir
     )
-    # data_path = DataPath(data_dir)
 
-    # final_nodes: pd.DataFrame = pd.read_parquet(
-    #     data_path / "create_final_nodes.parquet"
-    # )
-    # final_entities: pd.DataFrame = pd.read_parquet(
-    #     data_path / "create_final_entities.parquet"
-    # )
-    # final_community_reports: pd.DataFrame = pd.read_parquet(
-    #     data_path / "create_final_community_reports.parquet"
-    # )
-    final_nodes: pd.DataFrame = data_path.join("create_final_nodes.parquet").read_parquet()
-    final_entities: pd.DataFrame = data_path.join("create_final_entities.parquet").read_parquet()
-    final_community_reports: pd.DataFrame = data_path.join("create_final_community_reports.parquet").read_parquet()
+
+    final_nodes: pd.DataFrame = read_parquet_from_storage(
+        data_path, "create_final_nodes.parquet", config
+    )
+    final_entities: pd.DataFrame = read_parquet_from_storage(
+        data_path , "create_final_entities.parquet", config
+    )
+    final_community_reports: pd.DataFrame = read_parquet_from_storage(
+        data_path , "create_final_community_reports.parquet", config
+    )
 
 
     reports = read_indexer_reports(
@@ -141,23 +199,27 @@ def run_local_search(
         data_dir, root_dir, config_dir
     )
     # Just to fix the errors, need code changes for the local search as well
-    data_path = Path("")
 
-    final_nodes = pd.read_parquet(data_path / "create_final_nodes.parquet")
-    final_community_reports = pd.read_parquet(
-        data_path / "create_final_community_reports.parquet"
+
+    final_nodes: pd.DataFrame = read_parquet_from_storage(
+    data_path, "create_final_nodes.parquet", config
     )
-    final_text_units = pd.read_parquet(data_path / "create_final_text_units.parquet")
-    final_relationships = pd.read_parquet(
-        data_path / "create_final_relationships.parquet"
+
+    final_community_reports =read_parquet_from_storage(
+        data_path , "create_final_community_reports.parquet", config
     )
-    final_entities = pd.read_parquet(data_path / "create_final_entities.parquet")
-    final_covariates_path = data_path / "create_final_covariates.parquet"
-    final_covariates = (
-        pd.read_parquet(final_covariates_path)
-        if final_covariates_path.exists()
-        else None
+    final_text_units = read_parquet_from_storage(data_path , "create_final_text_units.parquet", config)
+    final_relationships = read_parquet_from_storage(
+        data_path, "create_final_relationships.parquet", config
     )
+    final_entities = read_parquet_from_storage(data_path, "create_final_entities.parquet", config)
+    # final_covariates_path = data_path +"/create_final_covariates.parquet"
+    # final_covariates = (
+    #     pd.read_parquet(final_covariates_path)
+    #     if final_covariates_path.exists()
+    #     else None
+    # )
+    final_covariates = None
 
     vector_store_args = (
         config.embeddings.vector_store if config.embeddings.vector_store else {}
@@ -201,7 +263,7 @@ def _configure_paths_and_settings(
     data_dir: str | None,
     root_dir: str | None,
     config_dir: str | None,
-) -> tuple[DataPath, str | None, GraphRagConfig]:
+) -> tuple[str, str | None, GraphRagConfig]:
     if data_dir is None and root_dir is None:
         msg = "Either data_dir or root_dir must be provided."
         raise ValueError(msg)
@@ -209,85 +271,116 @@ def _configure_paths_and_settings(
     config = _create_graphrag_config(root_dir, config_dir)
     if data_dir is None:
         data_path =  _infer_data_dir(cast(str, root_dir), config)
-    else:
-        data_path = DataPath(data_dir)
+
     
     return data_path, root_dir, config
 
 
-# def _infer_data_dir(root: str) -> str:
-#     output = Path(root) / "output"
-#     # use the latest data-run folder
-#     if output.exists():
-#         folders = sorted(output.iterdir(), key=os.path.getmtime, reverse=True)
-#         if len(folders) > 0:
-#             folder = folders[0]
-#             return str((folder / "artifacts").absolute())
-#     msg = f"Could not infer data directory from root={root}"
-#     raise ValueError(msg)
-from graphrag.index.config.storage import PipelineStorageConfigTypes, PipelineStorageConfig
-from graphrag.index.storage import PipelineStorage, load_storage
-from graphrag.config.enums import (
-    CacheType,
-    InputFileType,
-    ReportingType,
-    StorageType,
-    TextEmbeddingTarget,
-)
-
-from graphrag.index.config.storage import (
-    PipelineStorageConfigTypes,
-    PipelineFileStorageConfig,
-    PipelineMemoryStorageConfig,
-    PipelineBlobStorageConfig
-)
-from collections import defaultdict
-
-def _infer_data_dir(root: str, config: GraphRagConfig) -> DataPath:
+def _infer_data_dir(root: str, config: GraphRagConfig) -> str:
     storage_config = config.storage
-    if not isinstance(storage_config, PipelineStorageConfigTypes):
+    if not isinstance(storage_config, PipelineStorageConfig):
         # Convert StorageConfig to appropriate PipelineStorageConfig subclass
-        if storage_config.type == StorageType.file:
-            storage_config = PipelineFileStorageConfig(**storage_config.model_dump())
-        elif storage_config.type == StorageType.memory:
-            storage_config = PipelineMemoryStorageConfig(**storage_config.model_dump())
-        elif storage_config.type == StorageType.blob:
+        if storage_config.type == StorageType.blob:
             storage_config = PipelineBlobStorageConfig(**storage_config.model_dump())
         else:
             raise ValueError(f"Unsupported storage type: {storage_config.type}")
-    if config.storage.type == StorageType.blob:
-        # For blob storage (including Supabase)
+
+    if storage_config.type == StorageType.blob:
+        # For blob storage (including S3 and Supabase)
         storage = load_storage(storage_config)
-        
-        # List all items in the storage
-        all_items = storage.find(re.compile(r".*"), "output")
-        
-        directories = set(item[0] for item in all_items)
-        sorted_dirs = sorted(directories, reverse=True)
-        
-        for directory in sorted_dirs:
-            # Check if the directory contains .parquet files
-            # parquet_files = list(storage.find(re.compile(rf"{re.escape(directory)}.*\.parquet"))) # re.compile(rf"{re.escape(directory)}.*\.parquet")
-            parquet_pattern = rf"{directory}.*\.parquet"
-            print(f"Searching with pattern: {parquet_pattern}")
-            parquet_files = list(storage.find(re.compile(parquet_pattern)))
-            print(f"Found files: {parquet_files}")
-            if parquet_files:
-                # Found a directory with .parquet files
-                return DataPath(storage, is_supabase=True)
-        
-        msg = f"Could not find any directories with .parquet files in the blob storage"
-        raise ValueError(msg)
+        return _infer_blob_data_dir(storage)
     else:
         # For local file system
-        output = Path(root) / "output"
-        if output.exists():
-            folders = sorted(output.iterdir(), key=os.path.getmtime, reverse=True)
-            if len(folders) > 0:
-                folder = folders[0]
-                return DataPath(str((folder / "artifacts").absolute()), is_supabase=False)
-        msg = f"Could not infer data directory from root={root}"
-        raise ValueError(msg)
+        return _infer_local_data_dir(root)
+
+
+def _infer_blob_data_dir(storage: PipelineStorage) -> str:
+    """Infer the data directory in blob storage (S3)."""
+    output_prefix = "output/"
+    artifacts_suffix = "artifacts/"
+    
+    all_objects: List[Tuple[str, Dict[str, Any]]] = list(storage.find(
+        re.compile(f"^{output_prefix}")
+    ))
+    
+    if not all_objects:
+        raise ValueError(f"No objects found in {output_prefix}")
+    
+    # Group objects by their date directory
+    date_dirs = defaultdict(list)
+    for obj in all_objects:
+        key = obj[0]
+        match = re.match(f"^{output_prefix}(\\d{{8}}-\\d{{6}})/", key)
+        if match:
+            date_dir = match.group(1)
+            date_dirs[date_dir].append(obj)
+    
+    if not date_dirs:
+        raise ValueError(f"No valid date directories found in {output_prefix}")
+    
+    # Find the latest date directory that contains 'artifacts/'
+    latest_dir = None
+    latest_date = None
+    for date_dir, objects in date_dirs.items():
+        if any(f"{output_prefix}{date_dir}/{artifacts_suffix}" in obj[0] for obj in objects):
+            dir_date = datetime.strptime(date_dir, "%Y%m%d-%H%M%S")
+            if latest_date is None or dir_date > latest_date:
+                latest_date = dir_date
+                latest_dir = date_dir
+    
+    if latest_dir is None:
+        raise ValueError(f"No artifacts directory found in any date directory under {output_prefix}")
+    
+    # Construct the path to the artifacts folder
+    artifacts_path = f"{output_prefix}{latest_dir}/{artifacts_suffix}"
+    
+    return artifacts_path
+
+def _infer_local_data_dir(root: str) -> str:
+    output = Path(root) / "output"
+    if output.exists():
+        folders = sorted(output.iterdir(), key=os.path.getmtime, reverse=True)
+        if folders:
+            folder = folders[0]
+            return str((folder / "artifacts").absolute())
+    raise ValueError(f"Could not infer data directory from root={root}")
+
+
+def read_parquet_from_storage(data_path: str, file_name: str, config: GraphRagConfig) -> pd.DataFrame:
+    """Read a parquet file from either local storage or blob storage."""
+    if config.storage.type == StorageType.file:
+        # Local file system
+        return pd.read_parquet(Path(data_path) / file_name)
+
+    elif config.storage.type == StorageType.blob:
+        if not isinstance(config.storage, PipelineBlobStorageConfig):
+            storage_config = PipelineBlobStorageConfig(**config.storage.model_dump())
+        else:
+            storage_config = config.storage
+
+        # Create a PipelineStorage instance
+        # Note: try dict or manual type conversion
+        storage = load_storage(storage_config)
+
+        file_path = f"{data_path.rstrip('/')}/{file_name}"
+        matching_objects = list(storage.find(re.compile(re.escape(file_path))))
+
+        if matching_objects:
+            print(f"Found matching objects: {matching_objects}")
+        else:
+            print(f"No matching objects found for {file_path}")
+        try:
+            file_content = asyncio.run(storage.get(file_path))
+            if file_content is None:
+                raise FileNotFoundError(f"File {file_name} not found in storage at {data_path}")
+            print(f"Successfully retrieved file content for {file_path}")
+            return pd.read_parquet(BytesIO(file_content))
+        except Exception as e:
+            print(f"Error reading file {file_path}: {str(e)}")
+            raise
+    else:
+        raise ValueError(f"Unsupported  type: {type(config.storage)}")
+
 
 
 def _create_graphrag_config(

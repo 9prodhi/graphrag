@@ -52,7 +52,7 @@ from .reporting import (
     ProgressWorkflowCallbacks,
     load_pipeline_reporter,
 )
-from .storage import MemoryPipelineStorage, PipelineStorage, load_storage
+from .storage import MemoryPipelineStorage, PipelineStorage, load_storage, S3PipelineStorage
 from .typing import PipelineRunResult
 
 # Register all verbs
@@ -242,7 +242,12 @@ async def run_pipeline(
             raise ValueError(msg)
         try:
             log.info("read table from storage: %s", name)
-            return pd.read_parquet(BytesIO(await storage.get(name, as_bytes=True)))
+            if isinstance(storage, S3PipelineStorage):
+                s3_path = f"{storage._path_prefix}/{name}"
+                file_content = await storage.get(s3_path)
+                return pd.read_parquet(BytesIO(file_content))
+            else:
+                return pd.read_parquet(BytesIO(await storage.get(name, as_bytes=True)))
         except Exception:
             log.exception("error loading table from storage: %s", name)
             raise

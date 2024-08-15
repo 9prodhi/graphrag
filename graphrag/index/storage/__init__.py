@@ -9,6 +9,7 @@ from .load_storage import load_storage
 from .memory_pipeline_storage import MemoryPipelineStorage
 from .typing import PipelineStorage
 from .data_path import DataPath
+from .s3_blob_pipeline import S3PipelineStorage
 
 __all__ = [
     "BlobPipelineStorage",
@@ -18,4 +19,5 @@ __all__ = [
     "create_blob_storage",
     "load_storage",
     "DataPath",
+    "S3PipelineStorage"
 ]
